@@ -1,0 +1,247 @@
+# TraceMain Sandbox Workflow
+# Copy this file to .github/workflows/tracemain-sandbox.yml in your repository.
+# TraceMain dispatches this workflow to spin up sandboxes for PR and baseline branches.
+
+name: TraceMain Sandbox
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'TraceMain run ID'
+        required: true
+      ref:
+        description: 'Git ref to checkout (SHA or branch)'
+        required: true
+      role:
+        description: 'Sandbox role: pr or baseline'
+        required: true
+      callback_url:
+        description: 'TraceMain callback URL for status updates'
+        required: true
+      run_token:
+        description: 'Auth token for the callback'
+        required: true
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # ── Stage: queued ──────────────────────────────────────
+      - name: Report queued
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "queued",
+              "status": "done"
+            }' || true
+
+      # ── Stage: cloning ─────────────────────────────────────
+      - name: Report cloning (start)
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "cloning",
+              "status": "in_progress"
+            }' || true
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Report cloning (done)
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "cloning",
+              "status": "done"
+            }' || true
+
+      # ── Stage: installing ──────────────────────────────────
+      - name: Report installing (start)
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "installing",
+              "status": "in_progress"
+            }' || true
+
+      - name: Read config and build
+        id: build
+        run: |
+          # Read .tracemain.yml for the build command
+          if [ -f .tracemain.yml ]; then
+            BUILD_CMD=$(grep -E '^\s*build:' .tracemain.yml | head -1 | sed 's/^[[:space:]]*build:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+            if [ -n "$BUILD_CMD" ]; then
+              echo "Running build: $BUILD_CMD"
+              eval "$BUILD_CMD"
+            else
+              echo "No build command found in .tracemain.yml, skipping"
+            fi
+          else
+            echo "No .tracemain.yml found, skipping build"
+          fi
+
+      - name: Report installing (done)
+        if: success()
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "installing",
+              "status": "done"
+            }' || true
+
+      - name: Report installing (failed)
+        if: failure()
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "installing",
+              "status": "failed",
+              "detail": "Build step failed. Check the Actions log for details."
+            }' || true
+
+      # ── Stage: starting ────────────────────────────────────
+      - name: Report starting (start)
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "starting",
+              "status": "in_progress"
+            }' || true
+
+      - name: Start application
+        id: start
+        run: |
+          if [ -f .tracemain.yml ]; then
+            START_CMD=$(grep -E '^\s*start:' .tracemain.yml | head -1 | sed 's/^[[:space:]]*start:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+            if [ -n "$START_CMD" ]; then
+              echo "Running start: $START_CMD"
+              eval "$START_CMD" &
+              echo "APP_PID=$!" >> $GITHUB_ENV
+              # Give the app a moment to initialize
+              sleep 3
+            else
+              echo "No start command found"
+            fi
+          fi
+
+      - name: Report starting (done)
+        if: success()
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "starting",
+              "status": "done"
+            }' || true
+
+      # ── Stage: health_check ────────────────────────────────
+      - name: Report health_check (start)
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "health_check",
+              "status": "in_progress"
+            }' || true
+
+      - name: Poll health check
+        id: health
+        run: |
+          HEALTH_URL=""
+          TIMEOUT=120
+
+          if [ -f .tracemain.yml ]; then
+            HEALTH_URL=$(grep -E '^\s*health_check:' .tracemain.yml | head -1 | sed 's/^[[:space:]]*health_check:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+            CUSTOM_TIMEOUT=$(grep -E '^\s*health_check_timeout:' .tracemain.yml | head -1 | sed 's/^[[:space:]]*health_check_timeout:[[:space:]]*//')
+            if [ -n "$CUSTOM_TIMEOUT" ]; then
+              TIMEOUT=$CUSTOM_TIMEOUT
+            fi
+          fi
+
+          if [ -z "$HEALTH_URL" ]; then
+            echo "No health_check URL configured, skipping"
+            exit 0
+          fi
+
+          echo "Polling $HEALTH_URL (timeout: ${TIMEOUT}s)"
+          ELAPSED=0
+          INTERVAL=3
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            if curl -sS -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null | grep -q "^2"; then
+              echo "Health check passed after ${ELAPSED}s"
+              exit 0
+            fi
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+            echo "  Waiting... (${ELAPSED}s / ${TIMEOUT}s)"
+          done
+
+          echo "Health check timed out after ${TIMEOUT}s"
+          exit 1
+
+      - name: Report health_check (done / ready)
+        if: success()
+        run: |
+          # Report health_check done
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "health_check",
+              "status": "done"
+            }' || true
+
+          # Report ready
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "ready",
+              "status": "done"
+            }' || true
+
+      - name: Report health_check (failed)
+        if: failure()
+        run: |
+          curl -sS -X POST "${{ github.event.inputs.callback_url }}" \
+            -H "Authorization: Bearer ${{ github.event.inputs.run_token }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "role": "${{ github.event.inputs.role }}",
+              "stage": "health_check",
+              "status": "failed",
+              "detail": "Health check timed out. Ensure your health_check URL is correct in .tracemain.yml."
+            }' || true
