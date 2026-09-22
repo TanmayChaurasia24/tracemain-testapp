@@ -57,6 +57,10 @@ app.get('/ping', (_req, res) => {
   res.json({ message: 'pong' });
 });
 
+app.get('/info', (_req, res) => {
+  res.json({ app: 'demo-app', version: '1.0.0' });
+});
+
 app.get('/metrics', async (_req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
