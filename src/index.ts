@@ -4,6 +4,7 @@ import { ordersRouter } from './routes/orders.js';
 
 const app = express();
 const port = parseInt(process.env.DEMO_APP_PORT ?? '3002', 10);
+const startedAt = Date.now();
 
 // ── Prometheus metrics ──────────────────────────────────────
 const register = new client.Registry();
@@ -55,6 +56,12 @@ app.get('/health', (_req, res) => {
 
 app.get('/healthz', (_req, res) => {
   res.send('OK');
+});
+
+app.get('/uptime', (_req, res) => {
+  const uptimeMs = Date.now() - startedAt;
+  const uptimeSec = Math.floor(uptimeMs / 1000);
+  res.json({ uptime_seconds: uptimeSec, started_at: new Date(startedAt).toISOString() });
 });
 
 app.get('/metrics', async (_req, res) => {
