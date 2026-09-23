@@ -50,6 +50,7 @@ app.use(express.json());
 
 // ── Routes ──────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
+  console.log('Health check endpoint called!');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
