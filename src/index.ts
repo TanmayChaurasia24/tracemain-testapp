@@ -3,6 +3,7 @@ import client from 'prom-client';
 import { ordersRouter } from './routes/orders.js';
 import { authRouter } from './routes/auth.js';
 import { summarizeRouter } from './routes/summarize.js';
+import { cartRouter } from './routes/cart.js';
 import cors from 'cors';
 const app = express();
 const port = parseInt(process.env.DEMO_APP_PORT ?? '3002', 10);
@@ -76,6 +77,7 @@ app.get('/metrics', async (_req, res) => {
 app.use('/api/orders', ordersRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/summarize', summarizeRouter);
+app.use('/api/cart', cartRouter);
 
 // ── Start ───────────────────────────────────────────────────
 app.listen(port, () => {
