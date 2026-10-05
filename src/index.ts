@@ -1,7 +1,9 @@
 import express from 'express';
 import client from 'prom-client';
 import { ordersRouter } from './routes/orders.js';
-
+import { authRouter } from './routes/auth.js';
+import { summarizeRouter } from './routes/summarize.js';
+import cors from 'cors';
 const app = express();
 const port = parseInt(process.env.DEMO_APP_PORT ?? '3002', 10);
 
@@ -47,9 +49,11 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use(cors());
 
 // ── Routes ──────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
+  console.log('Health check endpoint called!');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -63,6 +67,8 @@ app.get('/metrics', async (_req, res) => {
 });
 
 app.use('/api/orders', ordersRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/summarize', summarizeRouter);
 
 // ── Start ───────────────────────────────────────────────────
 app.listen(port, () => {

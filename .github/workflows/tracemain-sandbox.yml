@@ -22,6 +22,11 @@ on:
       run_token:
         description: 'Auth token for the callback'
         required: true
+      test_plan:
+        description: 'JSON test plan from the test-plan agent'
+        required: false
+        default: '[]'
+
 
 jobs:
   sandbox:
