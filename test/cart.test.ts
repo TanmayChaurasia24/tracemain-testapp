@@ -104,3 +104,107 @@ describe('POST /api/cart/calculate', () => {
     });
   });
 });
+
+describe('POST /api/cart/apply-coupon', () => {
+  it('should apply valid coupon "SAVE10" with 10% discount', async () => {
+    const response = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 100,
+        couponCode: 'SAVE10'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      valid: true,
+      code: 'SAVE10',
+      discount: 10,
+      finalTotal: 90
+    });
+  });
+
+  it('should return 400 for invalid or expired coupon', async () => {
+    const response = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 100,
+        couponCode: 'INVALID'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('error');
+  });
+
+  it('should return 400 when cartTotal does not meet minimum threshold for "FLAT20"', async () => {
+    const response = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 40,
+        couponCode: 'FLAT20'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('error');
+  });
+
+  it('should apply "FLAT20" successfully when cartTotal meets the $50 threshold', async () => {
+    const response = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 75,
+        couponCode: 'FLAT20'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      valid: true,
+      code: 'FLAT20',
+      discount: 20,
+      finalTotal: 55
+    });
+  });
+
+  it('should apply "FREESHIP" coupon with $5 discount', async () => {
+    const response = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 50,
+        couponCode: 'FREESHIP'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      valid: true,
+      code: 'FREESHIP',
+      discount: 5,
+      finalTotal: 45
+    });
+  });
+
+  it('should return 400 if cartTotal is <= 0 or not a number', async () => {
+    const zeroRes = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 0,
+        couponCode: 'SAVE10'
+      });
+    expect(zeroRes.status).toBe(400);
+
+    const negRes = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: -10,
+        couponCode: 'SAVE10'
+      });
+    expect(negRes.status).toBe(400);
+
+    const stringRes = await request(app)
+      .post('/api/cart/apply-coupon')
+      .send({
+        cartTotal: 'invalid' as any,
+        couponCode: 'SAVE10'
+      });
+    expect(stringRes.status).toBe(400);
+  });
+});
+
